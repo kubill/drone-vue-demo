@@ -1,0 +1,102 @@
+kind: pipeline
+name: default
+
+steps:
+- name: restore-cache
+  image: drillster/drone-volume-cache
+  volumes:
+  - name: cache
+    path: /cache
+  settings:
+    restore: true
+    mount:
+      - ./node_modules
+      - ./yarn-cache
+    
+- name: build
+  image: node:12.18
+  commands:
+    - node -v
+    - npm -v
+    - yarn --version
+    - yarn config set cache-folder /drone/src/yarn-cache
+    - yarn install --pure-lockfile
+    - yarn run build
+
+- name: rebuild-cache
+  image: drillster/drone-volume-cache
+  volumes:
+  - name: cache
+    path: /cache
+  settings:
+    rebuild: true
+    mount:
+      - ./node_modules
+      - ./yarn-cache
+
+- name: code style
+  image: node:12.18
+  commands:
+    - yarn lint
+
+- name: deploy production
+  image: appleboy/drone-scp
+  group: deploy
+  settings:
+    host: 192.168.31.14
+    username: root
+    password: 123456
+    port: 22
+    target: /var/www
+    source: dist
+  when:
+    branch: master
+
+- name: deploy stage
+  image: appleboy/drone-scp
+  group: deploy
+  settings:
+    host: 192.168.31.14
+    username: root
+    password: 123456
+    port: 22
+    target: /var/www
+    source: dist
+  when:
+    branch: stage
+
+- name: ssh commands production
+  image: appleboy/drone-ssh
+  group: commands
+  settings:
+    host: 192.168.31.14
+    username: root
+    password: 123456
+    port: 22
+    script:
+      - echo production
+  when:
+    branch: master
+
+- name: ssh commands stage
+  image: appleboy/drone-ssh
+  group: commands
+  settings:
+    host: 192.168.31.14
+    username: root
+    password: 123456
+    port: 22
+    script:
+      - echo stage
+  when:
+    branch: stage
+
+trigger:
+  branch:
+    - stage
+    - master
+
+volumes:
+  - name: cache
+    host: 
+      path: /tmp/cache
